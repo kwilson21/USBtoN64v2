@@ -22,11 +22,10 @@ A_UP, A_DOWN, A_LEFT, A_RIGHT, DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT, BUTTON
 
 Note that the device saves the controls even when the device is powered off. It saves the Xbox and PS3 controls together as a shared layout and the Keyboard controls separately.
 
-Currently known bugs
-- Wireless X360 drops inputs
 
 TODO:
 - invent a way to change deadzone/sensitivity on-the-fly without changing the code
 - fix bugs
+- Test DS4 functionality (By: Agent21)
 
 By: Ownasaurus

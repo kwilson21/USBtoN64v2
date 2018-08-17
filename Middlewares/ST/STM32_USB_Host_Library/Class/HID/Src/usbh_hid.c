@@ -44,6 +44,34 @@
 #include "usbh_hid_parser.h"
 extern N64ControllerData n64_data;
 
+
+/* Used to set the colors of the PS4 controller.
+ * source: https://github.com/felis/USB_Host_Shield_2.0/blob/master/controllerEnums.h
+ */
+enum ColorsEnum {
+        /** r = 255, g = 0, b = 0 */
+        Red = 0xFF0000,
+        /** r = 0, g = 255, b = 0 */
+        Green = 0xFF00,
+        /** r = 0, g = 0, b = 255 */
+        Blue = 0xFF,
+
+        /** r = 255, g = 235, b = 4 */
+        Yellow = 0xFFEB04,
+        /** r = 0, g = 255, b = 255 */
+        Lightblue = 0xFFFF,
+        /** r = 255, g = 0, b = 255 */
+        Purple = 0xFF00FF,
+        Purble = 0xFF00FF,
+
+        /** r = 255, g = 255, b = 255 */
+        White = 0xFFFFFF,
+        /** r = 0, g = 0, b = 0 */
+        Off = 0x00,
+};
+
+
+
 //uint8_t ledpattern[7] = {0x02, 0x04, 0x08, 0x10, 0x12, 0x14, 0x18 };
 static uint8_t led_buffer[48] = {  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 							  0x02, /* LED_1 = 0x02, LED_2 = 0x04, ... */
@@ -53,9 +81,39 @@ static uint8_t led_buffer[48] = {  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
 							  0xff, 0x27, 0x10, 0x00, 0x32,// 29 bytes
 							  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 48 bytes
 
+static uint8_t rgb_buffer[32] = {   0x00, // report ID
+									0x00,
+									0x00, 0x00,
+									0x00, // small rumble
+									0x00, // big rumble
+									0x00, // red
+									0x00, // green
+									0x00, // blue
+									0x00, // time to flash bright (255 = 2.5 seconds)
+									0x00, // Time to flash dark (255 = 2.5 seconds)
+									0,0,0,0,0, // 16 bytes
+									0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 32 bytes
+
+
+static uint8_t* setPS4LED(enum ColorsEnum color){
+
+
+	uint8_t r = (uint8_t)(color >> 16);
+	uint8_t g = (uint8_t)(color >> 8);
+	uint8_t b = (uint8_t)(color);
+
+	rgb_buffer[6] = r;
+	rgb_buffer[7] = g;
+	rgb_buffer[8] = b;
+
+	return rgb_buffer;
+}
+
+
+
 extern uint8_t state;
 uint8_t keyboardButtonPressed = 0;
-uint8_t ds3ButtonPressed = 0;
+uint8_t dsButtonPressed = 0;
 extern Controls controls;
 extern ControllerType type;
 
@@ -63,6 +121,7 @@ void ChangeButtonMappingKB(uint8_t bt);
 void ChangeButtonMappingController(uint64_t bt);
 void AdvanceState();
 uint64_t USBH_HID_GetDS3ButtonsAndTriggers();
+uint64_t USBH_HID_GetDS4ButtonsAndTriggers();
 
 static USBH_StatusTypeDef USBH_HID_InterfaceInit  (USBH_HandleTypeDef *phost);
 static USBH_StatusTypeDef USBH_HID_InterfaceDeInit  (USBH_HandleTypeDef *phost);
@@ -83,7 +142,7 @@ USBH_ClassTypeDef  HID_Class =
   NULL,
 };
 
-uint64_t DetectButtonDS3(uint64_t buttons_and_triggers)
+uint64_t DetectButtonDS(uint64_t buttons_and_triggers)
 {
 	// bit smearing so all bits to the right of the first 1 are also 1
 	buttons_and_triggers |= buttons_and_triggers >> 32;
@@ -140,17 +199,25 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit (USBH_HandleTypeDef *phost)
       HID_Handle->Init =  USBH_HID_KeybdInit;
       type = CONTROLLER_KB;
     }
-    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol == HID_MOUSE_BOOT_CODE)
+    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol  == HID_MOUSE_BOOT_CODE)		  
     {
       USBH_UsrLog ("Mouse device found!");         
       HID_Handle->Init =  USBH_HID_MouseInit;     
     }
-    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol == HID_DS3_BOOT_CODE)
+    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol  == HID_DS3_BOOT_CODE && \
+    		phost->device.DevDesc.idVendor == 0x054C && phost->device.DevDesc.idProduct == 0x0268)
 	{
 	  USBH_UsrLog ("DS3 device found!");
 	  HID_Handle->Init =  USBH_HID_DS3Init;
 	  type = CONTROLLER_DS3;
 	}
+    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol  == HID_DS3_BOOT_CODE && \
+    		phost->device.DevDesc.idVendor == 0x054C && (phost->device.DevDesc.idProduct == 0x05C4 || phost->device.DevDesc.idProduct == 0x09CC))
+    {
+      USBH_UsrLog ("DS4 device found!");
+	  HID_Handle->Init =  USBH_HID_DS4Init;
+	  type = CONTROLLER_DS4;
+    }
     else
     {
       USBH_UsrLog ("Protocol not supported.");  
@@ -295,7 +362,15 @@ static USBH_StatusTypeDef USBH_HID_ClassRequest(USBH_HandleTypeDef *phost)
     	{
     		HID_Handle->ctl_state = HID_PS3_BOOTCODE;
     	}
-    	else HID_Handle->ctl_state = HID_REQ_SET_IDLE;
+    	else if(phost->device.DevDesc.idVendor == 0x054C && (phost->device.DevDesc.idProduct == 0x05C4 ||\
+    			phost->device.DevDesc.idProduct == 0x09CC)) // DS4 or DS4 Slim
+    	{
+    		HID_Handle->ctl_state = HID_PS4_BOOTCODE;
+    	}
+    	else
+    	{
+    		HID_Handle->ctl_state = HID_REQ_SET_IDLE;
+    	}
     }
     
     break;
@@ -312,7 +387,16 @@ static USBH_StatusTypeDef USBH_HID_ClassRequest(USBH_HandleTypeDef *phost)
   		  HID_Handle->ctl_state = HID_REQ_IDLE; // move on to normal input processing
   	  }
   	  break;
-
+  case HID_PS4_BOOTCODE:
+	  if(USBH_HID_SetReport(phost,0x43,0x02,setPS4LED(0),32) == USBH_OK)
+	  {
+		  HID_Handle->ctl_state = HID_PS4_LED;
+	  }
+  case HID_PS4_LED:
+	  if(USBH_HID_SetReport(phost,0x05,0xFF,setPS4LED(Red),32) == USBH_OK)
+	  {
+		  HID_Handle->ctl_state = HID_REQ_IDLE; // move on to normal input processing
+	  }
   case HID_REQ_SET_IDLE:
     
     classReqStatus = USBH_HID_SetIdle (phost, 0, 0);
@@ -672,6 +756,11 @@ HID_TypeTypeDef USBH_HID_GetDeviceType(USBH_HandleTypeDef *phost)
 	{
 	  type=  HID_DS3;
 	}
+    else if(phost->device.CfgDesc.Itf_Desc[phost->device.current_interface].bInterfaceProtocol \
+	  == HID_DS3_BOOT_CODE)
+	{
+	  type=  HID_DS4;
+	}
   }
   return type;
 }
@@ -805,8 +894,10 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 {
 	HID_TypeTypeDef type = HID_UNKNOWN;
 	HID_KEYBD_Info_TypeDef* kb_state = NULL;
-	HID_DS3_Info_TypeDef* ds3_state = NULL;
+	HID_DS3_Info_TypeDef* ds3_state = NULL;\
+	HID_DS4_Info_TypeDef* ds4_state = NULL;
 	N64ControllerData new_data;
+	uint64_t buttons_and_triggers;
 
 	type = USBH_HID_GetDeviceType(phost);
 
@@ -942,7 +1033,7 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 			break;
 		case HID_DS3:
 			ds3_state = USBH_HID_GetDS3Info(phost);
-			uint64_t buttons_and_triggers = USBH_HID_GetDS3ButtonsAndTriggers();
+			buttons_and_triggers = USBH_HID_GetDS3ButtonsAndTriggers();
 
 			if(state == NORMAL)
 			{
@@ -1006,6 +1097,9 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 				}
 
 				// ----- begin nrage replication analog code -----
+				const int sensitivity = 85; // Nta Bryte
+				const int dead_zone = 15;   // Nta Bryte
+				const float DS3_MAX = 127;
 				const float N64_MAX = (sensitivity > 0) ? 127*(sensitivity/100.0f) : 0;
 				float deadzoneValue = (dead_zone/100.0f) * DS3_MAX;
 				float deadzoneRelation = DS3_MAX / (DS3_MAX - deadzoneValue);
@@ -1053,22 +1147,155 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 			}
 			else
 			{
-				uint64_t b = DetectButtonDS3(buttons_and_triggers); // read for button presses (just do linear search)
+				uint64_t b = DetectButtonDS(buttons_and_triggers); // read for button presses (just do linear search)
 				if(b != 0) /*button was actually is pressed*/
 				{
-					if(ds3ButtonPressed == 0)
+					if(dsButtonPressed == 0)
 					{
-						ds3ButtonPressed = 1;
+						dsButtonPressed = 1;
 						ChangeButtonMappingController(b);
 						AdvanceState();
 					}
 				}
 				else
 				{
-					ds3ButtonPressed = 0;
+					dsButtonPressed = 0;
 				}
 			}
 			break;
+		case HID_DS4:
+			ds4_state = USBH_HID_GetDS4Info(phost);
+				buttons_and_triggers = USBH_HID_GetDS4ButtonsAndTriggers();
+
+				if(state == NORMAL)
+				{
+					memset(&new_data,0,4);
+
+
+					if(buttons_and_triggers & controls.XpadControls.up)
+					{
+						new_data.up = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.down)
+					{
+						new_data.down = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.left)
+					{
+						new_data.left = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.right)
+					{
+						new_data.right = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.c_up)
+					{
+						new_data.c_up = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.c_down)
+					{
+						new_data.c_down = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.c_left)
+					{
+						new_data.c_left = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.c_right)
+					{
+						new_data.c_right = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.l)
+					{
+						new_data.l = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.r)
+					{
+						new_data.r = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.z)
+					{
+						new_data.z = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.a)
+					{
+						new_data.a = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.b)
+					{
+						new_data.b = 1;
+					}
+					if(buttons_and_triggers & controls.XpadControls.start)
+					{
+						new_data.start = 1;
+					}
+
+					// ----- begin nrage replication analog code -----
+					const int sensitivity = 85; // Nta Bryte
+					const int dead_zone = 15;   // Nta Bryte
+					const float DS4_MAX = 127;
+					const float N64_MAX = (sensitivity > 0) ? 127*(sensitivity/100.0f) : 0;
+					float deadzoneValue = (dead_zone/100.0f) * DS4_MAX;
+					float deadzoneRelation = DS4_MAX / (DS4_MAX - deadzoneValue);
+
+					int8_t LSX = 0, LSY = 0; // -128 to +127...
+					float unscaled_result = 0;
+					int8_t stick_lx = ds4_state->LAnalogX - 128;
+					int8_t stick_ly = ds4_state->LAnalogY - 128;
+
+					if(stick_lx >= deadzoneValue) // positive = right
+					{
+						unscaled_result = (stick_lx - deadzoneValue) * deadzoneRelation;
+						LSX = (int8_t)(unscaled_result * (N64_MAX / DS4_MAX));
+					}
+					else if(stick_lx <= (-deadzoneValue)) // negative = left
+					{
+						stick_lx++; // just in case it's -128 it cannot be negated. otherwise the 1 is negligible.
+						stick_lx = -stick_lx; // compute as positive, then negate at the end
+						unscaled_result = (stick_lx - deadzoneValue) * deadzoneRelation;
+						LSX = (int8_t)(unscaled_result * (N64_MAX / DS4_MAX));
+						LSX = -LSX;
+					}
+
+					if(stick_ly >= deadzoneValue) // DS4 positive = down
+					{
+						unscaled_result = (stick_ly - deadzoneValue) * deadzoneRelation;
+						LSY = (int8_t)(unscaled_result * (N64_MAX / DS4_MAX));
+						LSY = -LSY; // for n64 down is negative
+					}
+					else if(stick_ly <= (-deadzoneValue)) // DS4 negative = up
+					{
+						stick_lx++; // just in case it's -128 it cannot be negated. otherwise the 1 is negligible.
+						stick_ly = -stick_ly; // compute as positive
+						unscaled_result = (stick_ly - deadzoneValue) * deadzoneRelation;
+						LSY = (int8_t)(unscaled_result * (N64_MAX / DS4_MAX));
+					}
+					new_data.x_axis = reverse((uint8_t)LSX);
+					new_data.y_axis = reverse((uint8_t)LSY);
+					// end of analog code
+
+					// atomic update of n64 state
+					__disable_irq();
+					memcpy(&n64_data, &new_data,4);
+					__enable_irq();
+				}
+				else
+				{
+					uint64_t b = DetectButtonDS(buttons_and_triggers); // read for button presses (just do linear search)
+					if(b != 0) /*button was actually is pressed*/
+					{
+						if(dsButtonPressed == 0)
+						{
+							dsButtonPressed = 1;
+							ChangeButtonMappingController(b);
+							AdvanceState();
+						}
+					}
+					else
+					{
+						dsButtonPressed = 0;
+					}
+				}
+				break;
 		default:
 			break;
 	}

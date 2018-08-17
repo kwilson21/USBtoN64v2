@@ -5,7 +5,7 @@ Utilizes Nucleo-F446RE board with custom header for usb and n64 communication
 Currently supported USB devices:
 - Keyboard
 - Playstation Dualshock 3 Sixaxis
-- Playstation Dualshock 4 (Not confirmed working. Currently being tested)
+- *Playstation Dualshock 4 (Not confirmed working. Currently being tested)
 - Wireless Xbox 360 with Microsoft USB wireless receiver
 - Wired Xbox 360
 - Wired Xbox One

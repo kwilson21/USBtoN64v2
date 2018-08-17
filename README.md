@@ -29,5 +29,4 @@ TODO:
 - fix bugs
 - Test DS4 functionality (By: Agent21)
 
-By: Ownasaurus
-with additions by: Agent21
+By: Ownasaurus; additions by Agent21

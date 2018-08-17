@@ -80,7 +80,7 @@ static uint8_t led_buffer[48] = {  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0
 							  0xff, 0x27, 0x10, 0x00, 0x32,
 							  0xff, 0x27, 0x10, 0x00, 0x32,// 29 bytes
 							  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 48 bytes
-
+/*
 static uint8_t rgb_buffer[32] = {   0x00, // report ID
 									0x00,
 									0x00, 0x00,
@@ -93,10 +93,11 @@ static uint8_t rgb_buffer[32] = {   0x00, // report ID
 									0x00, // Time to flash dark (255 = 2.5 seconds)
 									0,0,0,0,0, // 16 bytes
 									0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // 32 bytes
-
+*/
 
 static uint8_t* setPS4LED(enum ColorsEnum color){
 
+	static uint8_t rgb_buffer[32];
 
 	uint8_t r = (uint8_t)(color >> 16);
 	uint8_t g = (uint8_t)(color >> 8);
@@ -108,7 +109,6 @@ static uint8_t* setPS4LED(enum ColorsEnum color){
 
 	return rgb_buffer;
 }
-
 
 
 extern uint8_t state;
@@ -335,6 +335,7 @@ static USBH_StatusTypeDef USBH_HID_ClassRequest(USBH_HandleTypeDef *phost)
   USBH_StatusTypeDef status         = USBH_BUSY;
   USBH_StatusTypeDef classReqStatus = USBH_BUSY;
   HID_HandleTypeDef *HID_Handle =  (HID_HandleTypeDef *) phost->pActiveClass->pData; 
+  uint8_t *rgb_buf;
 
   /* Switch HID state machine */
   switch (HID_Handle->ctl_state)
@@ -388,12 +389,9 @@ static USBH_StatusTypeDef USBH_HID_ClassRequest(USBH_HandleTypeDef *phost)
   	  }
   	  break;
   case HID_PS4_BOOTCODE:
-	  if(USBH_HID_SetReport(phost,0x43,0x02,setPS4LED(0),32) == USBH_OK)
-	  {
-		  HID_Handle->ctl_state = HID_PS4_LED;
-	  }
-  case HID_PS4_LED:
-	  if(USBH_HID_SetReport(phost,0x05,0xFF,setPS4LED(Red),32) == USBH_OK)
+	  rgb_buf = setPS4LED(Red);
+
+	  if(USBH_HID_SetReport(phost,0x05,0xFF,rgb_buf,32) == USBH_OK)
 	  {
 		  HID_Handle->ctl_state = HID_REQ_IDLE; // move on to normal input processing
 	  }
@@ -894,7 +892,7 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 {
 	HID_TypeTypeDef type = HID_UNKNOWN;
 	HID_KEYBD_Info_TypeDef* kb_state = NULL;
-	HID_DS3_Info_TypeDef* ds3_state = NULL;\
+	HID_DS3_Info_TypeDef* ds3_state = NULL;
 	HID_DS4_Info_TypeDef* ds4_state = NULL;
 	N64ControllerData new_data;
 	uint64_t buttons_and_triggers;

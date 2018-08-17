@@ -1097,9 +1097,6 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 				}
 
 				// ----- begin nrage replication analog code -----
-				const int sensitivity = 85; // Nta Bryte
-				const int dead_zone = 15;   // Nta Bryte
-				const float DS3_MAX = 127;
 				const float N64_MAX = (sensitivity > 0) ? 127*(sensitivity/100.0f) : 0;
 				float deadzoneValue = (dead_zone/100.0f) * DS3_MAX;
 				float deadzoneRelation = DS3_MAX / (DS3_MAX - deadzoneValue);
@@ -1230,9 +1227,6 @@ __weak void USBH_HID_EventCallback(USBH_HandleTypeDef *phost)
 					}
 
 					// ----- begin nrage replication analog code -----
-					const int sensitivity = 85; // Nta Bryte
-					const int dead_zone = 15;   // Nta Bryte
-					const float DS4_MAX = 127;
 					const float N64_MAX = (sensitivity > 0) ? 127*(sensitivity/100.0f) : 0;
 					float deadzoneValue = (dead_zone/100.0f) * DS4_MAX;
 					float deadzoneRelation = DS4_MAX / (DS4_MAX - deadzoneValue);
